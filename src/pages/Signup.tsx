@@ -139,11 +139,11 @@ const Signup = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" placeholder="John" required />
+                      <Input id="firstName" placeholder="Lohith" required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" placeholder="Doe" required />
+                      <Input id="lastName" placeholder="Elu" required />
                     </div>
                   </div>
                   <div className="space-y-2">
