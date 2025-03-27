@@ -1,6 +1,5 @@
-
 // Currency formatter
-export const formatCurrency = (amount: number, currency = 'USD', locale = 'en-US'): string => {
+export const formatCurrency = (amount: number, currency = 'INR', locale = 'en-IN'): string => {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
