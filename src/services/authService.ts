@@ -42,10 +42,10 @@ class AuthService {
       
       // Create mock user
       this.user = {
-        id: 'user123',
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-        photoURL: 'https://randomuser.me/api/portraits/men/32.jpg',
+        id: "user123",
+        name: "Lohith E",
+        email: "lohith.elu@gmail.com",
+        photoURL: '/../../public/assets/image.png',
         isAuthenticated: true
       };
       
