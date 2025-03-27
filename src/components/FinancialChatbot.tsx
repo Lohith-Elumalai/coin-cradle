@@ -1,15 +1,20 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bot, User, SendHorizontal, Trash2 } from "lucide-react";
-import chatbotService, { ChatMessage } from "@/services/chatbotService";
 import { toast } from "@/hooks/use-toast";
 
 interface FinancialChatbotProps {
   className?: string;
+}
+
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
 }
 
 const FinancialChatbot: React.FC<FinancialChatbotProps> = ({ className }) => {
@@ -18,37 +23,28 @@ const FinancialChatbot: React.FC<FinancialChatbotProps> = ({ className }) => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [chatHistory, setChatHistory] = useState<{ role: string; parts: string }[]>([]);
 
   useEffect(() => {
-    const loadMessages = async () => {
-      try {
-        const loadedMessages = await chatbotService.getMessages();
-        if (loadedMessages.length === 0) {
-          // Add welcome message if no messages exist
-          const welcomeMessage: ChatMessage = {
-            id: "welcome",
-            role: "assistant",
-            content:
-              "Hello! I'm your AI financial assistant. I can help you with budgeting, investment suggestions, debt management, and more. How can I help you today?",
-            timestamp: new Date(),
-          };
-          setMessages([welcomeMessage]);
-        } else {
-          setMessages(loadedMessages);
-        }
-      } catch (error) {
-        console.error("Error loading messages:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load chat messages",
-          variant: "destructive",
-        });
-      }
+    const welcomeMessage: ChatMessage = {
+      id: "welcome-" + Date.now(),
+      role: "assistant",
+      content: "Hello! I'm your AI financial assistant powered by Gemini. I can help you with budgeting, investment suggestions, debt management, and more. How can I help you today?",
+      timestamp: new Date(),
     };
-
-    loadMessages();
+    setMessages([welcomeMessage]);
     
-    // Focus the input when component mounts
+    setChatHistory([
+      {
+        role: "user",
+        parts: "You are a helpful financial assistant. Provide concise, accurate financial advice. If asked about non-financial topics, politely decline and refocus on financial matters. Always provide clear explanations and break down complex concepts."
+      },
+      {
+        role: "model",
+        parts: "Understood. I'm ready to assist with financial questions including budgeting, investments, loans, taxes, and personal finance management."
+      }
+    ]);
+
     setTimeout(() => {
       inputRef.current?.focus();
     }, 500);
@@ -62,66 +58,179 @@ const FinancialChatbot: React.FC<FinancialChatbotProps> = ({ className }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const generateId = () => {
+    return 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || isLoading) return;
     
+    const userMessageId = generateId();
+    const userMessage: ChatMessage = {
+      id: userMessageId,
+      role: "user",
+      content: inputMessage,
+      timestamp: new Date(),
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage("");
     setIsLoading(true);
     
     try {
-      // We'll let the chatbotService handle adding the user message to the state
-      const response = await chatbotService.sendMessage(inputMessage);
+      const updatedHistory = [
+        ...chatHistory,
+        { role: "user", parts: inputMessage }
+      ];
+      setChatHistory(updatedHistory);
       
-      // Update local state with the latest messages
-      const updatedMessages = await chatbotService.getMessages();
-      setMessages(updatedMessages);
+      console.log("Sending to Gemini:", updatedHistory); // Debug log
       
-      setInputMessage("");
+      const response = await fetchGeminiResponse(updatedHistory);
       
-      // Focus the input after sending
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+      const botMessageId = generateId();
+      const botMessage: ChatMessage = {
+        id: botMessageId,
+        role: "assistant",
+        content: response,
+        timestamp: new Date(),
+      };
+      
+      setChatHistory(prev => [
+        ...prev,
+        { role: "model", parts: response }
+      ]);
+      
+      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Gemini API Error:", error);
+      
+      let errorMessage = "Sorry, I encountered an error. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+      }
+      
+      const errorMessageId = generateId();
+      const errorDisplayMessage: ChatMessage = {
+        id: errorMessageId,
+        role: "assistant",
+        content: errorMessage,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorDisplayMessage]);
+      
       toast({
-        title: "Error",
-        description: "Failed to send message",
+        title: "API Error",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleClearChat = async () => {
-    try {
-      await chatbotService.clearConversation();
-      const welcomeMessage: ChatMessage = {
-        id: "welcome",
-        role: "assistant",
-        content:
-          "Hello! I'm your AI financial assistant. I can help you with budgeting, investment suggestions, debt management, and more. How can I help you today?",
-        timestamp: new Date(),
-      };
-      setMessages([welcomeMessage]);
-      
-      // Focus the input after clearing
       setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
-    } catch (error) {
-      console.error("Error clearing chat:", error);
-      toast({
-        title: "Error",
-        description: "Failed to clear chat",
-        variant: "destructive",
-      });
     }
   };
 
-  // Handle Enter key press
+  const fetchGeminiResponse = async (history: { role: string; parts: string }[]) => {
+    const API_KEY = "AIzaSyD7RzF-y3UqPoCXnc94fnyuR3wqqMJ0OwY";
+    if (!API_KEY) {
+      throw new Error("Gemini API key is not configured");
+    }
+
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${API_KEY}`;
+    
+    // Format history for Gemini API (only keep the last few messages to avoid hitting token limits)
+    const recentHistory = history.slice(-6); // Keep last 3 exchanges
+    const contents = recentHistory.map(item => ({
+      role: item.role === "model" ? "model" : "user",
+      parts: [{ text: item.parts }]
+    }));
+    
+    console.log("Formatted Gemini request:", { contents }); // Debug log
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.9,
+            maxOutputTokens: 1024,
+          },
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+          ]
+        }),
+      });
+      
+      console.log("Gemini response status:", response.status); // Debug log
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Gemini API Error Data:", errorData); // Debug log
+        throw new Error(errorData.error?.message || `API request failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log("Gemini full response:", data); // Debug log
+      
+      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        console.error("Unexpected response format:", data);
+        throw new Error("Received unexpected response format from Gemini");
+      }
+      
+      // Check for safety filters
+      if (data.candidates[0].safetyRatings) {
+        const blocked = data.candidates[0].safetyRatings.some(
+          (rating: any) => rating.blocked
+        );
+        if (blocked) {
+          throw new Error("Response blocked by safety filters");
+        }
+      }
+      
+      return data.candidates[0].content.parts[0].text;
+    } catch (error) {
+      console.error("Error in fetchGeminiResponse:", error);
+      throw error;
+    }
+  };
+
+  const handleClearChat = () => {
+    const welcomeMessage: ChatMessage = {
+      id: "welcome-" + Date.now(),
+      role: "assistant",
+      content: "Hello! I'm your AI financial assistant powered by Gemini. I can help you with budgeting, investment suggestions, debt management, and more. How can I help you today?",
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMessage]);
+    setChatHistory([
+      {
+        role: "user",
+        parts: "You are a helpful financial assistant. Provide concise, accurate financial advice. If asked about non-financial topics, politely decline and refocus on financial matters."
+      },
+      {
+        role: "model",
+        parts: "Understood. I'm ready to assist with financial questions."
+      }
+    ]);
+    
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
