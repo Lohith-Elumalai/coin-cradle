@@ -120,7 +120,7 @@ const Dashboard = () => {
           </div>
           <Button className="bg-gold hover:bg-gold-dark text-white">
             <Plus className="mr-2 h-4 w-4" />
-            Add Transaction
+            Add App
           </Button>
         </div>
 
